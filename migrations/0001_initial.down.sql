@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS trades;
+DROP TABLE IF EXISTS signals;
+DROP TABLE IF EXISTS polymarket_books;
+DROP TABLE IF EXISTS price_ticks;

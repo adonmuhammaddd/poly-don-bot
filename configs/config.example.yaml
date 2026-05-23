@@ -1,0 +1,66 @@
+# Bot configuration template.
+# Copy to configs/config.yaml (gitignored) and adjust as needed.
+# Env vars listed in .env.example take precedence over values here.
+
+env: dev
+log_level: info
+
+http:
+  port: 8080
+  metrics_port: 9100
+
+postgres:
+  url: ${POSTGRES_URL}
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime_minutes: 30
+
+redis:
+  url: ${REDIS_URL}
+
+feeds:
+  binance:
+    ws_url: ${BINANCE_WS_URL}
+    symbols:
+      - btcusdt
+    streams:
+      - aggTrade
+      - bookTicker
+    reconnect:
+      initial_backoff_ms: 1000
+      max_backoff_ms: 30000
+      heartbeat_interval_seconds: 30
+      heartbeat_timeout_seconds: 10
+
+  polymarket:
+    ws_url: ${POLYMARKET_WS_URL}
+    rest_url: ${POLYMARKET_REST_URL}
+    market_filter_pattern: "BTC Up/Down (5 min)"
+    market_refresh_interval_seconds: 30
+    rate_limit:
+      requests_per_minute: 80
+    reconnect:
+      initial_backoff_ms: 1000
+      max_backoff_ms: 30000
+      heartbeat_interval_seconds: 30
+      heartbeat_timeout_seconds: 10
+
+# Placeholders below are wired in later phases. Kept here so the config schema
+# stays visible end-to-end and operators can see what's coming.
+
+strategy:
+  enabled: false
+
+execution:
+  enabled: false
+  mode: paper
+
+risk:
+  max_position_size_usd: 50
+  max_position_pct_balance: 0.05
+  max_trades_per_day: 30
+  max_daily_loss_usd: 30
+  max_daily_loss_pct: 0.15
+  max_consecutive_losses: 5
+  max_signal_age_ms: 500
+  min_balance_usd: 50
