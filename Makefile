@@ -1,10 +1,15 @@
 .DEFAULT_GOAL := help
 
+# Auto-load .env if present so every target inherits POSTGRES_URL etc. without
+# the caller having to `export` manually. `-include` is non-fatal if missing.
+-include .env
+export
+
 POSTGRES_URL ?= postgres://poly:poly_dev_password@localhost:5432/polybot?sslmode=disable
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 # ---- Go bot ----
 
@@ -105,8 +110,12 @@ clean: ## Stop services + remove volumes (WARNING: deletes Postgres/Redis data)
 
 # ---- First-time setup ----
 
+.PHONY: ensure-env
+ensure-env: ## Create .env from .env.example if missing
+	@if [ ! -f .env ]; then cp .env.example .env && echo ".env created from .env.example"; fi
+
 .PHONY: setup
-setup: up ## First-time setup: start infra + wait + run migrations
+setup: ensure-env up ## First-time setup: create .env + start infra + wait + run migrations
 	@echo "Waiting for postgres..."
 	@until docker exec polybot-postgres pg_isready -U poly -d polybot >/dev/null 2>&1; do sleep 1; done
 	@echo "Postgres ready. Running migrations..."
