@@ -26,6 +26,9 @@ type Metrics struct {
 	SignalsDetected     *prometheus.CounterVec
 	SignalsPersistError *prometheus.CounterVec
 
+	PaperTradesOpened  *prometheus.CounterVec
+	PaperTradesSkipped *prometheus.CounterVec
+
 	registry *prometheus.Registry
 }
 
@@ -108,6 +111,20 @@ func NewMetrics() *Metrics {
 			},
 			[]string{"reason"},
 		),
+		PaperTradesOpened: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "paper_trades_opened_total",
+				Help: "Number of paper trades opened, by side (YES/NO).",
+			},
+			[]string{"side"},
+		),
+		PaperTradesSkipped: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "paper_trades_skipped_total",
+				Help: "Number of signals not converted to paper trades, by reason.",
+			},
+			[]string{"reason"},
+		),
 		registry: reg,
 	}
 	reg.MustRegister(
@@ -122,6 +139,8 @@ func NewMetrics() *Metrics {
 		m.PolymarketRESTErrors,
 		m.SignalsDetected,
 		m.SignalsPersistError,
+		m.PaperTradesOpened,
+		m.PaperTradesSkipped,
 	)
 	return m
 }

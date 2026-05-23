@@ -71,3 +71,19 @@ WHERE exchange = sqlc.arg(exchange)
   AND symbol = sqlc.arg(symbol)
   AND ts_exchange BETWEEN sqlc.arg(from_ts) AND sqlc.arg(to_ts)
 ORDER BY ts_exchange ASC;
+
+-- name: InsertTrade :one
+INSERT INTO trades (
+  signal_id, mode, market_id, side, entry_price, size_usd, opened_at, status
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8
+)
+RETURNING id;
+
+-- name: ListOpenPaperTradeSizes :many
+SELECT size_usd FROM trades
+WHERE mode = 'paper' AND status = 'open';
+
+-- name: CountTodayPaperTrades :one
+SELECT count(*) FROM trades
+WHERE mode = 'paper' AND opened_at >= $1;

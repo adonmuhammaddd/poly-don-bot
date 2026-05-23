@@ -16,12 +16,6 @@ import (
 	"github.com/adonmuhammaddd/poly-don-bot/internal/strategy"
 )
 
-// Detector is the bit of *strategy.Detector that Persister needs. It exists so
-// tests can pass a fake without spinning up a real detector window.
-type Detector interface {
-	OnTick(price decimal.Decimal, ts time.Time) (*strategy.Signal, bool)
-}
-
 // Storage is the slice of *postgres.Queries that Persister uses.
 type Storage interface {
 	InsertSignal(ctx context.Context, arg postgres.InsertSignalParams) (int64, error)
@@ -29,20 +23,20 @@ type Storage interface {
 	GetLatestYesQuote(ctx context.Context, marketID string) (postgres.GetLatestYesQuoteRow, error)
 }
 
-// Persister bridges a Detector with Postgres. It implements binance.TickListener.
+// Persister snapshots Polymarket context and writes a signal to Postgres.
+// It implements strategy.SignalListener — feed pipeline detection lives in
+// strategy.Runner, which fans out to this and other listeners.
 type Persister struct {
-	detector Detector
-	storage  Storage
-	logger   *slog.Logger
-	metrics  *observability.Metrics
+	storage Storage
+	logger  *slog.Logger
+	metrics *observability.Metrics
 
 	dbTimeout time.Duration
 	actionTag string
 }
 
-func NewPersister(detector Detector, storage Storage, metrics *observability.Metrics, logger *slog.Logger) *Persister {
+func NewPersister(storage Storage, metrics *observability.Metrics, logger *slog.Logger) *Persister {
 	return &Persister{
-		detector:  detector,
 		storage:   storage,
 		logger:    logger.With(slog.String("component", "signals")),
 		metrics:   metrics,
@@ -51,15 +45,9 @@ func NewPersister(detector Detector, storage Storage, metrics *observability.Met
 	}
 }
 
-// OnTick implements binance.TickListener. It delegates to the detector and,
-// when a signal is emitted, snapshots the latest Polymarket context and
-// persists everything to the signals table.
-func (p *Persister) OnTick(price decimal.Decimal, ts time.Time) {
-	sig, ok := p.detector.OnTick(price, ts)
-	if !ok {
-		return
-	}
-
+// OnSignal implements strategy.SignalListener. Snapshots the latest Polymarket
+// market + YES quote, then writes the signal row.
+func (p *Persister) OnSignal(sig *strategy.Signal) {
 	p.metrics.SignalsDetected.WithLabelValues(string(sig.Direction)).Inc()
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.dbTimeout)

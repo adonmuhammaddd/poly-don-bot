@@ -13,10 +13,12 @@ import (
 
 	"github.com/adonmuhammaddd/poly-don-bot/internal/api"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/config"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/execution"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/binance"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/polymarket"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/observability"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/risk"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/signals"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/strategy"
@@ -60,7 +62,13 @@ func run() error {
 	tracker := latency.NewTracker(latency.Config{})
 
 	detector := strategy.NewDetector(strategy.Config{Symbol: "btcusdt"})
-	persister := signals.NewPersister(detector, queries, metrics, logger)
+	runner := strategy.NewRunner(detector)
+	persister := signals.NewPersister(queries, metrics, logger)
+	runner.Subscribe(persister)
+
+	riskGate := risk.NewRisk(risk.Config{})
+	paperExec := execution.NewPaperExecutor(execution.PaperConfig{}, queries, riskGate, metrics, logger)
+	runner.Subscribe(paperExec)
 
 	binanceClient := binance.NewClient(
 		binance.Config{
@@ -77,7 +85,7 @@ func run() error {
 		queries,
 	)
 	binanceClient.WithListener(tracker)
-	binanceClient.WithListener(persister)
+	binanceClient.WithListener(runner)
 
 	polymarketClient := polymarket.NewClient(
 		polymarket.Config{

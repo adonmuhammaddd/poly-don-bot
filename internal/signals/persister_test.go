@@ -19,19 +19,9 @@ import (
 	"github.com/adonmuhammaddd/poly-don-bot/internal/strategy"
 )
 
-func TestOnTick_NoSignalNoOp(t *testing.T) {
-	det := &fakeDetector{}
-	store := &fakeStorage{}
-	p := newTestPersister(det, store)
-	p.OnTick(decimal.NewFromInt(65000), time.Now())
-	if len(store.inserts) != 0 {
-		t.Errorf("expected no insert when detector returns no signal")
-	}
-}
-
-func TestOnTick_PersistsSignalWithPolymarketContext(t *testing.T) {
+func TestOnSignal_PersistsWithPolymarketContext(t *testing.T) {
 	now := time.Now().UTC()
-	det := &fakeDetector{sig: &strategy.Signal{
+	sig := &strategy.Signal{
 		Symbol:     "btcusdt",
 		Direction:  strategy.DirectionUp,
 		Magnitude:  decimal.NewFromFloat(0.0025),
@@ -42,7 +32,7 @@ func TestOnTick_PersistsSignalWithPolymarketContext(t *testing.T) {
 			BinancePrice:     decimal.NewFromInt(65000),
 			WindowStartPrice: decimal.NewFromFloat(64837.5),
 		},
-	}}
+	}
 	store := &fakeStorage{
 		market: postgres.GetLatestActiveMarketRow{
 			MarketID: "0xabc",
@@ -54,8 +44,8 @@ func TestOnTick_PersistsSignalWithPolymarketContext(t *testing.T) {
 			YesAsk: decimal.NewNullDecimal(decimal.NewFromFloat(0.51)),
 		},
 	}
-	p := newTestPersister(det, store)
-	p.OnTick(decimal.NewFromInt(65000), now)
+	p := newTestPersister(store)
+	p.OnSignal(sig)
 
 	if len(store.inserts) != 1 {
 		t.Fatalf("got %d inserts want 1", len(store.inserts))
@@ -89,11 +79,10 @@ func TestOnTick_PersistsSignalWithPolymarketContext(t *testing.T) {
 	}
 }
 
-func TestOnTick_OmitsPolymarketWhenNoMarket(t *testing.T) {
-	det := &fakeDetector{sig: validSignal()}
+func TestOnSignal_OmitsPolymarketWhenNoMarket(t *testing.T) {
 	store := &fakeStorage{marketErr: pgx.ErrNoRows}
-	p := newTestPersister(det, store)
-	p.OnTick(decimal.NewFromInt(65000), time.Now())
+	p := newTestPersister(store)
+	p.OnSignal(validSignal())
 
 	if len(store.inserts) != 1 {
 		t.Fatalf("got %d inserts want 1", len(store.inserts))
@@ -107,16 +96,15 @@ func TestOnTick_OmitsPolymarketWhenNoMarket(t *testing.T) {
 	}
 }
 
-func TestOnTick_IncludesPartialQuoteWhenAskMissing(t *testing.T) {
-	det := &fakeDetector{sig: validSignal()}
+func TestOnSignal_IncludesPartialQuoteWhenAskMissing(t *testing.T) {
 	store := &fakeStorage{
 		market: postgres.GetLatestActiveMarketRow{MarketID: "0xabc", Question: "q"},
 		yes: postgres.GetLatestYesQuoteRow{
 			YesBid: decimal.NewNullDecimal(decimal.NewFromFloat(0.49)),
 		},
 	}
-	p := newTestPersister(det, store)
-	p.OnTick(decimal.NewFromInt(65000), time.Now())
+	p := newTestPersister(store)
+	p.OnSignal(validSignal())
 
 	var ctx signalContext
 	_ = json.Unmarshal(store.inserts[0].Context, &ctx)
@@ -128,14 +116,10 @@ func TestOnTick_IncludesPartialQuoteWhenAskMissing(t *testing.T) {
 	}
 }
 
-func TestOnTick_InsertErrorReportsMetric(t *testing.T) {
-	det := &fakeDetector{sig: validSignal()}
+func TestOnSignal_InsertErrorDoesNotPanic(t *testing.T) {
 	store := &fakeStorage{insertErr: errors.New("db down")}
-	p := newTestPersister(det, store)
-	p.OnTick(decimal.NewFromInt(65000), time.Now())
-
-	// Best-effort: we can't easily check Prometheus counter increments without
-	// poking the registry; the success path is that no panic occurs.
+	p := newTestPersister(store)
+	p.OnSignal(validSignal())
 	if len(store.inserts) != 0 {
 		t.Errorf("expected insert to fail, got %d", len(store.inserts))
 	}
@@ -152,23 +136,12 @@ func validSignal() *strategy.Signal {
 	}
 }
 
-func newTestPersister(det Detector, store Storage) *Persister {
-	return NewPersister(det, store, observability.NewMetrics(), testLogger())
+func newTestPersister(store Storage) *Persister {
+	return NewPersister(store, observability.NewMetrics(), testLogger())
 }
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
-type fakeDetector struct {
-	sig *strategy.Signal
-}
-
-func (f *fakeDetector) OnTick(_ decimal.Decimal, _ time.Time) (*strategy.Signal, bool) {
-	if f.sig == nil {
-		return nil, false
-	}
-	return f.sig, true
 }
 
 type fakeStorage struct {

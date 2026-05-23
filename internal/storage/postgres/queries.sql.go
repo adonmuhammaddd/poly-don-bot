@@ -46,6 +46,18 @@ func (q *Queries) CountPriceTicksSince(ctx context.Context, arg CountPriceTicksS
 	return count, err
 }
 
+const countTodayPaperTrades = `-- name: CountTodayPaperTrades :one
+SELECT count(*) FROM trades
+WHERE mode = 'paper' AND opened_at >= $1
+`
+
+func (q *Queries) CountTodayPaperTrades(ctx context.Context, openedAt pgtype.Timestamptz) (int64, error) {
+	row := q.db.QueryRow(ctx, countTodayPaperTrades, openedAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getLatestActiveMarket = `-- name: GetLatestActiveMarket :one
 SELECT market_id, question, ts_received AS last_seen
 FROM polymarket_books
@@ -245,6 +257,67 @@ func (q *Queries) InsertSignal(ctx context.Context, arg InsertSignalParams) (int
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertTrade = `-- name: InsertTrade :one
+INSERT INTO trades (
+  signal_id, mode, market_id, side, entry_price, size_usd, opened_at, status
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8
+)
+RETURNING id
+`
+
+type InsertTradeParams struct {
+	SignalID   pgtype.Int8        `json:"signal_id"`
+	Mode       string             `json:"mode"`
+	MarketID   string             `json:"market_id"`
+	Side       string             `json:"side"`
+	EntryPrice decimal.Decimal    `json:"entry_price"`
+	SizeUsd    decimal.Decimal    `json:"size_usd"`
+	OpenedAt   pgtype.Timestamptz `json:"opened_at"`
+	Status     string             `json:"status"`
+}
+
+func (q *Queries) InsertTrade(ctx context.Context, arg InsertTradeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertTrade,
+		arg.SignalID,
+		arg.Mode,
+		arg.MarketID,
+		arg.Side,
+		arg.EntryPrice,
+		arg.SizeUsd,
+		arg.OpenedAt,
+		arg.Status,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const listOpenPaperTradeSizes = `-- name: ListOpenPaperTradeSizes :many
+SELECT size_usd FROM trades
+WHERE mode = 'paper' AND status = 'open'
+`
+
+func (q *Queries) ListOpenPaperTradeSizes(ctx context.Context) ([]decimal.Decimal, error) {
+	rows, err := q.db.Query(ctx, listOpenPaperTradeSizes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []decimal.Decimal{}
+	for rows.Next() {
+		var size_usd decimal.Decimal
+		if err := rows.Scan(&size_usd); err != nil {
+			return nil, err
+		}
+		items = append(items, size_usd)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPriceTicksRange = `-- name: ListPriceTicksRange :many
