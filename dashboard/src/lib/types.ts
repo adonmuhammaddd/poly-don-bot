@@ -45,3 +45,35 @@ export interface LatencyResponse {
   stats: LatencyStats;
   samples: LatencyMeasurement[];
 }
+
+export type SignalDirection = "up" | "down";
+
+export interface SignalContext {
+  strategy?: {
+    binancePrice?: string;
+    windowStartPrice?: string;
+    windowStartAt?: string;
+    velocityBpsPerSec?: string;
+    ticksInWindow?: number;
+  };
+  polymarket?: {
+    marketId?: string;
+    question?: string;
+    yesBid?: string;
+    yesAsk?: string;
+    yesMid?: string;
+  };
+}
+
+export interface Signal {
+  id: number;
+  symbol: string;
+  direction: SignalDirection;
+  magnitude: string;
+  windowMs: number;
+  confidence: string;
+  detectedAt: string;
+  context: SignalContext;
+  actionTaken?: string;
+  actionReason?: string;
+}

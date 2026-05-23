@@ -8,6 +8,8 @@ import type {
   LatencyResponse,
   LatestBook,
   PriceTick,
+  Signal,
+  SignalDirection,
 } from "@/lib/types";
 
 export default function Home() {
@@ -43,6 +45,7 @@ export default function Home() {
     marketId ? `/api/stream/book?marketId=${encodeURIComponent(marketId)}` : null
   );
   const latency = useSSE<LatencyResponse>("/api/stream/latency");
+  const signals = useSSE<Signal[]>("/api/stream/signals");
 
   return (
     <main className="p-6 max-w-6xl mx-auto space-y-4">
@@ -56,8 +59,161 @@ export default function Home() {
         />
       </div>
       <LatencyCard data={latency.data} state={latency.state} error={latency.error} />
+      <SignalsCard data={signals.data} state={signals.state} error={signals.error} />
     </main>
   );
+}
+
+type SignalFilter = SignalDirection | "all";
+
+function SignalsCard({
+  data,
+  state,
+  error,
+}: {
+  data: Signal[] | null;
+  state: string;
+  error: string | null;
+}) {
+  const [filter, setFilter] = useState<SignalFilter>("all");
+
+  const all = data ?? [];
+  const filtered = filter === "all" ? all : all.filter((s) => s.direction === filter);
+  const buckets = bucketByConfidence(all);
+
+  return (
+    <section className="rounded-lg border border-white/10 bg-white/[0.02] p-5 space-y-4">
+      <header className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold tracking-wide opacity-70">
+          SIGNALS · momentum detector
+        </h2>
+        <ConnectionPill state={state} />
+      </header>
+
+      <div className="flex items-center gap-2 text-xs">
+        <FilterChip current={filter} value="all" label={`all (${all.length})`} onSelect={setFilter} />
+        <FilterChip
+          current={filter}
+          value="up"
+          label={`up (${all.filter((s) => s.direction === "up").length})`}
+          onSelect={setFilter}
+        />
+        <FilterChip
+          current={filter}
+          value="down"
+          label={`down (${all.filter((s) => s.direction === "down").length})`}
+          onSelect={setFilter}
+        />
+        <span className="text-xs opacity-50 ml-auto">last {all.length} signals</span>
+      </div>
+
+      <ConfidenceHistogram buckets={buckets} />
+
+      {filtered.length === 0 ? (
+        <div className="text-xs opacity-50 italic py-6 text-center">
+          {all.length === 0 ? "No signals yet — waiting for BTC to move >0.1%…" : "No signals match this filter."}
+        </div>
+      ) : (
+        <ul className="space-y-1 max-h-72 overflow-y-auto text-xs font-mono">
+          {filtered.map((sig) => (
+            <SignalRow key={sig.id} sig={sig} />
+          ))}
+        </ul>
+      )}
+
+      {error && <div className="text-xs text-red-400">{error}</div>}
+    </section>
+  );
+}
+
+function FilterChip({
+  current,
+  value,
+  label,
+  onSelect,
+}: {
+  current: SignalFilter;
+  value: SignalFilter;
+  label: string;
+  onSelect: (v: SignalFilter) => void;
+}) {
+  const active = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      className={`px-2 py-0.5 rounded uppercase tracking-wider text-[10px] ${
+        active
+          ? "bg-white/15 text-white"
+          : "bg-white/[0.03] text-white/50 hover:text-white/80"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ConfidenceHistogram({ buckets }: { buckets: number[] }) {
+  const max = Math.max(...buckets, 1);
+  return (
+    <div>
+      <div className="flex justify-between text-[10px] opacity-50 mb-1">
+        <span>0.0</span>
+        <span>confidence distribution</span>
+        <span>1.0</span>
+      </div>
+      <div className="h-12 flex items-end gap-[2px]">
+        {buckets.map((count, i) => {
+          const heightPct = (count / max) * 100;
+          return (
+            <div
+              key={i}
+              className="flex-1 rounded-sm bg-cyan-500/60"
+              style={{ height: `${Math.max(heightPct, count > 0 ? 8 : 0)}%` }}
+              title={`bucket ${(i / 10).toFixed(1)}-${((i + 1) / 10).toFixed(1)}: ${count}`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SignalRow({ sig }: { sig: Signal }) {
+  const time = new Date(sig.detectedAt).toLocaleTimeString();
+  const magnitudePct = (Number.parseFloat(sig.magnitude) * 100).toFixed(3);
+  const dirCls = sig.direction === "up" ? "text-emerald-400" : "text-red-400";
+  const dirGlyph = sig.direction === "up" ? "↑" : "↓";
+  const polyMid = sig.context?.polymarket?.yesMid;
+  const polyMidStr = polyMid ? `${(Number.parseFloat(polyMid) * 100).toFixed(1)}%` : "—";
+
+  return (
+    <li className="grid grid-cols-[80px_36px_70px_60px_1fr] gap-2 py-1 border-b border-white/5">
+      <span className="opacity-50">{time}</span>
+      <span className={`text-base leading-none ${dirCls}`} aria-label={sig.direction}>
+        {dirGlyph}
+      </span>
+      <span>{magnitudePct}%</span>
+      <span className="opacity-80">{Number.parseFloat(sig.confidence).toFixed(2)}</span>
+      <span className="opacity-50 truncate">
+        poly YES {polyMidStr}
+        {sig.actionTaken && (
+          <span className="ml-2 px-1 rounded bg-white/5 text-[10px]">{sig.actionTaken}</span>
+        )}
+      </span>
+    </li>
+  );
+}
+
+function bucketByConfidence(signals: Signal[]): number[] {
+  const buckets = new Array<number>(10).fill(0);
+  for (const sig of signals) {
+    const c = Number.parseFloat(sig.confidence);
+    if (Number.isNaN(c)) continue;
+    const idx = Math.min(Math.floor(c * 10), 9);
+    buckets[idx]++;
+  }
+  return buckets;
 }
 
 function BinanceCard({
