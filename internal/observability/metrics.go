@@ -23,6 +23,9 @@ type Metrics struct {
 	PolymarketActiveMarkets    prometheus.Gauge
 	PolymarketRESTErrors       *prometheus.CounterVec
 
+	SignalsDetected     *prometheus.CounterVec
+	SignalsPersistError *prometheus.CounterVec
+
 	registry *prometheus.Registry
 }
 
@@ -91,6 +94,20 @@ func NewMetrics() *Metrics {
 			},
 			[]string{"reason"},
 		),
+		SignalsDetected: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "signals_detected_total",
+				Help: "Number of momentum signals detected, by direction.",
+			},
+			[]string{"direction"},
+		),
+		SignalsPersistError: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "signals_persist_errors_total",
+				Help: "Number of signal persistence failures, by reason.",
+			},
+			[]string{"reason"},
+		),
 		registry: reg,
 	}
 	reg.MustRegister(
@@ -103,6 +120,8 @@ func NewMetrics() *Metrics {
 		m.PolymarketReconnectSeconds,
 		m.PolymarketActiveMarkets,
 		m.PolymarketRESTErrors,
+		m.SignalsDetected,
+		m.SignalsPersistError,
 	)
 	return m
 }

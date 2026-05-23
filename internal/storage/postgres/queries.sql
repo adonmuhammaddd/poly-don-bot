@@ -49,3 +49,17 @@ FROM polymarket_books
 WHERE market_id = $1 AND no_bid IS NOT NULL
 ORDER BY ts_received DESC
 LIMIT 1;
+
+-- name: InsertSignal :one
+INSERT INTO signals (
+  symbol, direction, magnitude, window_ms, confidence, detected_at, context, action_taken, action_reason
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
+)
+RETURNING id;
+
+-- name: ListRecentSignals :many
+SELECT id, symbol, direction, magnitude, window_ms, confidence, detected_at, context, action_taken, action_reason
+FROM signals
+ORDER BY detected_at DESC
+LIMIT $1;

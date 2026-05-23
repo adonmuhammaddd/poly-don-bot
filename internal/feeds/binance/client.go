@@ -48,12 +48,12 @@ type Dialer interface {
 }
 
 type Client struct {
-	cfg      Config
-	logger   *slog.Logger
-	metrics  *observability.Metrics
-	storage  Storage
-	dialer   Dialer
-	listener TickListener
+	cfg       Config
+	logger    *slog.Logger
+	metrics   *observability.Metrics
+	storage   Storage
+	dialer    Dialer
+	listeners []TickListener
 }
 
 func NewClient(cfg Config, logger *slog.Logger, metrics *observability.Metrics, storage Storage) *Client {
@@ -72,9 +72,9 @@ func (c *Client) WithDialer(d Dialer) *Client {
 	return c
 }
 
-// WithListener registers a listener that receives each persisted tick.
+// WithListener appends a listener that receives each persisted tick.
 func (c *Client) WithListener(l TickListener) *Client {
-	c.listener = l
+	c.listeners = append(c.listeners, l)
 	return c
 }
 
@@ -219,8 +219,8 @@ func (c *Client) handleMessage(ctx context.Context, raw []byte) error {
 		return fmt.Errorf("insert: %w", err)
 	}
 	c.metrics.BinanceTicks.WithLabelValues(symbol, "aggTrade").Inc()
-	if c.listener != nil {
-		c.listener.OnTick(price, tradeTime)
+	for _, l := range c.listeners {
+		l.OnTick(price, tradeTime)
 	}
 	return nil
 }

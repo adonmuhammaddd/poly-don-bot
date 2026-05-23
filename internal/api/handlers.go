@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -127,6 +128,46 @@ func (s *Server) latestBook(r *http.Request, marketID string) (LatestBookRespons
 
 func (s *Server) handleLatencyRecent(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.buildLatencyResponse(60))
+}
+
+func (s *Server) handleSignalsRecent(w http.ResponseWriter, r *http.Request) {
+	limit := int32(50)
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = int32(n) //nolint:gosec // bounded above
+		}
+	}
+	rows, err := s.repo.ListRecentSignals(r.Context(), limit)
+	if err != nil {
+		s.logger.Error("list recent signals", slog.Any("error", err))
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, signalsResponseFrom(rows))
+}
+
+func signalsResponseFrom(rows []postgres.Signal) []SignalResponse {
+	out := make([]SignalResponse, 0, len(rows))
+	for _, r := range rows {
+		resp := SignalResponse{
+			ID:         r.ID,
+			Symbol:     r.Symbol,
+			Direction:  r.Direction,
+			Magnitude:  r.Magnitude.String(),
+			WindowMs:   r.WindowMs,
+			Confidence: r.Confidence.String(),
+			DetectedAt: r.DetectedAt.Time.UTC(),
+			Context:    r.Context,
+		}
+		if r.ActionTaken.Valid {
+			resp.ActionTaken = r.ActionTaken.String
+		}
+		if r.ActionReason.Valid {
+			resp.ActionReason = r.ActionReason.String
+		}
+		out = append(out, resp)
+	}
+	return out
 }
 
 func (s *Server) buildLatencyResponse(maxSamples int) LatencyResponse {

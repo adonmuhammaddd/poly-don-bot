@@ -46,13 +46,13 @@ type Dialer interface {
 }
 
 type Client struct {
-	cfg      Config
-	rest     MarketFinder
-	logger   *slog.Logger
-	metrics  *observability.Metrics
-	storage  Storage
-	dialer   Dialer
-	listener BookListener
+	cfg       Config
+	rest      MarketFinder
+	logger    *slog.Logger
+	metrics   *observability.Metrics
+	storage   Storage
+	dialer    Dialer
+	listeners []BookListener
 }
 
 func NewClient(cfg Config, logger *slog.Logger, metrics *observability.Metrics, storage Storage) *Client {
@@ -76,9 +76,9 @@ func (c *Client) WithMarketFinder(m MarketFinder) *Client {
 	return c
 }
 
-// WithListener registers a listener that receives each persisted book update.
+// WithListener appends a listener that receives each persisted book update.
 func (c *Client) WithListener(l BookListener) *Client {
-	c.listener = l
+	c.listeners = append(c.listeners, l)
 	return c
 }
 
@@ -252,8 +252,8 @@ func (c *Client) handleBookEvent(ctx context.Context, market *Market, raw []byte
 		return fmt.Errorf("insert book: %w", err)
 	}
 	c.metrics.PolymarketBookUpdates.WithLabelValues(side, "book").Inc()
-	if c.listener != nil {
-		c.listener.OnBookUpdate(time.Now().UTC())
+	for _, l := range c.listeners {
+		l.OnBookUpdate(time.Now().UTC())
 	}
 	return nil
 }
@@ -291,8 +291,8 @@ func (c *Client) handlePriceChangeEvent(ctx context.Context, market *Market, raw
 			return fmt.Errorf("insert price_change: %w", err)
 		}
 		c.metrics.PolymarketBookUpdates.WithLabelValues(side, "price_change").Inc()
-		if c.listener != nil {
-			c.listener.OnBookUpdate(time.Now().UTC())
+		for _, l := range c.listeners {
+			l.OnBookUpdate(time.Now().UTC())
 		}
 	}
 	return nil

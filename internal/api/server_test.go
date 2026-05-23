@@ -234,6 +234,52 @@ func TestStreamBook_MissingParams(t *testing.T) {
 	}
 }
 
+func TestHandleSignalsRecent(t *testing.T) {
+	now := time.Now().UTC()
+	repo := &fakeRepo{
+		signals: []postgres.Signal{
+			{
+				ID:           1,
+				Symbol:       "btcusdt",
+				Direction:    "up",
+				Magnitude:    decimal.NewFromFloat(0.0025),
+				WindowMs:     1000,
+				Confidence:   decimal.NewFromFloat(0.75),
+				DetectedAt:   pgtype.Timestamptz{Time: now, Valid: true},
+				Context:      []byte(`{"strategy":{}}`),
+				ActionTaken:  pgtype.Text{String: "skipped", Valid: true},
+				ActionReason: pgtype.Text{String: "phase_2_observation", Valid: true},
+			},
+		},
+	}
+	s := newTestServer(repo)
+	rec := doRequest(t, s, http.MethodGet, "/api/signals/recent")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	var got []SignalResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len=%d want 1", len(got))
+	}
+	if got[0].Direction != "up" || got[0].Confidence != "0.75" {
+		t.Errorf("got=%+v", got[0])
+	}
+	if got[0].ActionTaken != "skipped" {
+		t.Errorf("ActionTaken=%q", got[0].ActionTaken)
+	}
+}
+
+func TestHandleSignalsRecent_LimitClamp(t *testing.T) {
+	s := newTestServer(&fakeRepo{})
+	rec := doRequest(t, s, http.MethodGet, "/api/signals/recent?limit=999999")
+	if rec.Code != http.StatusOK {
+		t.Errorf("status=%d", rec.Code)
+	}
+}
+
 func TestHandleLatencyRecent(t *testing.T) {
 	now := time.Now().UTC()
 	repo := &fakeRepo{}
@@ -339,6 +385,9 @@ type fakeRepo struct {
 
 	latestNo    postgres.GetLatestNoQuoteRow
 	latestNoErr error
+
+	signals    []postgres.Signal
+	signalsErr error
 }
 
 func (f *fakeRepo) GetLatestPriceTick(_ context.Context, _ postgres.GetLatestPriceTickParams) (postgres.GetLatestPriceTickRow, error) {
@@ -363,6 +412,12 @@ func (f *fakeRepo) GetLatestNoQuote(_ context.Context, _ string) (postgres.GetLa
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.latestNo, f.latestNoErr
+}
+
+func (f *fakeRepo) ListRecentSignals(_ context.Context, _ int32) ([]postgres.Signal, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.signals, f.signalsErr
 }
 
 func newTestServer(repo Repository) *Server {

@@ -27,6 +27,7 @@ type Repository interface {
 	GetLatestActiveMarket(ctx context.Context, since pgtype.Timestamptz) (postgres.GetLatestActiveMarketRow, error)
 	GetLatestYesQuote(ctx context.Context, marketID string) (postgres.GetLatestYesQuoteRow, error)
 	GetLatestNoQuote(ctx context.Context, marketID string) (postgres.GetLatestNoQuoteRow, error)
+	ListRecentSignals(ctx context.Context, limit int32) ([]postgres.Signal, error)
 }
 
 type Config struct {
@@ -70,9 +71,11 @@ func NewServer(cfg Config, repo Repository, lat LatencyView, logger *slog.Logger
 	r.Get("/api/polymarket/current", s.handleCurrentMarket)
 	r.Get("/api/polymarket/book/{marketId}", s.handleLatestBook)
 	r.Get("/api/latency/recent", s.handleLatencyRecent)
+	r.Get("/api/signals/recent", s.handleSignalsRecent)
 	r.Get("/api/stream/prices", s.handleStreamPrices)
 	r.Get("/api/stream/book", s.handleStreamBook)
 	r.Get("/api/stream/latency", s.handleStreamLatency)
+	r.Get("/api/stream/signals", s.handleStreamSignals)
 
 	s.router = r
 	s.srv = &http.Server{

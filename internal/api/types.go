@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
@@ -44,4 +45,17 @@ type LatencyMeasurement struct {
 	BinanceMoveAt     time.Time `json:"binanceMoveAt"`
 	PolymarketReprice time.Time `json:"polymarketReprice"`
 	DeltaMs           int64     `json:"deltaMs"`
+}
+
+type SignalResponse struct {
+	ID           int64           `json:"id"`
+	Symbol       string          `json:"symbol"`
+	Direction    string          `json:"direction"`
+	Magnitude    string          `json:"magnitude"`
+	WindowMs     int32           `json:"windowMs"`
+	Confidence   string          `json:"confidence"`
+	DetectedAt   time.Time       `json:"detectedAt"`
+	Context      json.RawMessage `json:"context"`
+	ActionTaken  string          `json:"actionTaken,omitempty"`
+	ActionReason string          `json:"actionReason,omitempty"`
 }

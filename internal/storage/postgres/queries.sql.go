@@ -208,3 +208,79 @@ func (q *Queries) InsertPriceTick(ctx context.Context, arg InsertPriceTickParams
 	err := row.Scan(&id)
 	return id, err
 }
+
+const insertSignal = `-- name: InsertSignal :one
+INSERT INTO signals (
+  symbol, direction, magnitude, window_ms, confidence, detected_at, context, action_taken, action_reason
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
+)
+RETURNING id
+`
+
+type InsertSignalParams struct {
+	Symbol       string             `json:"symbol"`
+	Direction    string             `json:"direction"`
+	Magnitude    decimal.Decimal    `json:"magnitude"`
+	WindowMs     int32              `json:"window_ms"`
+	Confidence   decimal.Decimal    `json:"confidence"`
+	DetectedAt   pgtype.Timestamptz `json:"detected_at"`
+	Context      []byte             `json:"context"`
+	ActionTaken  pgtype.Text        `json:"action_taken"`
+	ActionReason pgtype.Text        `json:"action_reason"`
+}
+
+func (q *Queries) InsertSignal(ctx context.Context, arg InsertSignalParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertSignal,
+		arg.Symbol,
+		arg.Direction,
+		arg.Magnitude,
+		arg.WindowMs,
+		arg.Confidence,
+		arg.DetectedAt,
+		arg.Context,
+		arg.ActionTaken,
+		arg.ActionReason,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const listRecentSignals = `-- name: ListRecentSignals :many
+SELECT id, symbol, direction, magnitude, window_ms, confidence, detected_at, context, action_taken, action_reason
+FROM signals
+ORDER BY detected_at DESC
+LIMIT $1
+`
+
+func (q *Queries) ListRecentSignals(ctx context.Context, limit int32) ([]Signal, error) {
+	rows, err := q.db.Query(ctx, listRecentSignals, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Signal{}
+	for rows.Next() {
+		var i Signal
+		if err := rows.Scan(
+			&i.ID,
+			&i.Symbol,
+			&i.Direction,
+			&i.Magnitude,
+			&i.WindowMs,
+			&i.Confidence,
+			&i.DetectedAt,
+			&i.Context,
+			&i.ActionTaken,
+			&i.ActionReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

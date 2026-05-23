@@ -17,7 +17,9 @@ import (
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/polymarket"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/observability"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/signals"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/strategy"
 )
 
 func main() {
@@ -57,6 +59,9 @@ func run() error {
 
 	tracker := latency.NewTracker(latency.Config{})
 
+	detector := strategy.NewDetector(strategy.Config{Symbol: "btcusdt"})
+	persister := signals.NewPersister(detector, queries, metrics, logger)
+
 	binanceClient := binance.NewClient(
 		binance.Config{
 			WSURL:             cfg.Binance.WSURL,
@@ -72,6 +77,7 @@ func run() error {
 		queries,
 	)
 	binanceClient.WithListener(tracker)
+	binanceClient.WithListener(persister)
 
 	polymarketClient := polymarket.NewClient(
 		polymarket.Config{

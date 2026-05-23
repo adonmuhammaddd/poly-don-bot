@@ -85,6 +85,50 @@ func (s *Server) handleStreamPrices(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleStreamSignals(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	setupSSEHeaders(w)
+
+	ticker := time.NewTicker(s.streamInterval)
+	defer ticker.Stop()
+	keepalive := time.NewTicker(30 * time.Second)
+	defer keepalive.Stop()
+
+	var lastID int64
+
+	push := func() {
+		rows, err := s.repo.ListRecentSignals(r.Context(), 50)
+		if err != nil {
+			return
+		}
+		if len(rows) == 0 || rows[0].ID == lastID {
+			return
+		}
+		lastID = rows[0].ID
+		data, err := json.Marshal(signalsResponseFrom(rows))
+		if err != nil {
+			return
+		}
+		_ = writeSSE(w, flusher, data)
+	}
+
+	push()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			push()
+		case <-keepalive.C:
+			_ = writeSSEKeepalive(w, flusher)
+		}
+	}
+}
+
 func (s *Server) handleStreamLatency(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
