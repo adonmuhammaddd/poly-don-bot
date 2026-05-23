@@ -1,0 +1,32 @@
+package api
+
+import "time"
+
+type HealthResponse struct {
+	Status string `json:"status"`
+}
+
+type PriceTickResponse struct {
+	Exchange   string    `json:"exchange"`
+	Symbol     string    `json:"symbol"`
+	Price      string    `json:"price"`
+	TsExchange time.Time `json:"tsExchange"`
+	TsReceived time.Time `json:"tsReceived"`
+}
+
+type CurrentMarketResponse struct {
+	MarketID string    `json:"marketId"`
+	Question string    `json:"question"`
+	LastSeen time.Time `json:"lastSeen"`
+}
+
+type LatestBookResponse struct {
+	MarketID   string    `json:"marketId"`
+	YesBid     *string   `json:"yesBid,omitempty"`
+	YesAsk     *string   `json:"yesAsk,omitempty"`
+	NoBid      *string   `json:"noBid,omitempty"`
+	NoAsk      *string   `json:"noAsk,omitempty"`
+	YesUpdated time.Time `json:"yesUpdated"`
+	NoUpdated  time.Time `json:"noUpdated"`
+	Mid        *string   `json:"mid,omitempty"`
+}

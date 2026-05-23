@@ -46,6 +46,48 @@ func (q *Queries) CountPriceTicksSince(ctx context.Context, arg CountPriceTicksS
 	return count, err
 }
 
+const getLatestActiveMarket = `-- name: GetLatestActiveMarket :one
+SELECT market_id, question, ts_received AS last_seen
+FROM polymarket_books
+WHERE ts_received >= $1
+ORDER BY ts_received DESC
+LIMIT 1
+`
+
+type GetLatestActiveMarketRow struct {
+	MarketID string             `json:"market_id"`
+	Question string             `json:"question"`
+	LastSeen pgtype.Timestamptz `json:"last_seen"`
+}
+
+func (q *Queries) GetLatestActiveMarket(ctx context.Context, tsReceived pgtype.Timestamptz) (GetLatestActiveMarketRow, error) {
+	row := q.db.QueryRow(ctx, getLatestActiveMarket, tsReceived)
+	var i GetLatestActiveMarketRow
+	err := row.Scan(&i.MarketID, &i.Question, &i.LastSeen)
+	return i, err
+}
+
+const getLatestNoQuote = `-- name: GetLatestNoQuote :one
+SELECT no_bid, no_ask, ts_received
+FROM polymarket_books
+WHERE market_id = $1 AND no_bid IS NOT NULL
+ORDER BY ts_received DESC
+LIMIT 1
+`
+
+type GetLatestNoQuoteRow struct {
+	NoBid      decimal.NullDecimal `json:"no_bid"`
+	NoAsk      decimal.NullDecimal `json:"no_ask"`
+	TsReceived pgtype.Timestamptz  `json:"ts_received"`
+}
+
+func (q *Queries) GetLatestNoQuote(ctx context.Context, marketID string) (GetLatestNoQuoteRow, error) {
+	row := q.db.QueryRow(ctx, getLatestNoQuote, marketID)
+	var i GetLatestNoQuoteRow
+	err := row.Scan(&i.NoBid, &i.NoAsk, &i.TsReceived)
+	return i, err
+}
+
 const getLatestPriceTick = `-- name: GetLatestPriceTick :one
 SELECT id, exchange, symbol, price, ts_exchange, ts_received
 FROM price_ticks
@@ -79,6 +121,27 @@ func (q *Queries) GetLatestPriceTick(ctx context.Context, arg GetLatestPriceTick
 		&i.TsExchange,
 		&i.TsReceived,
 	)
+	return i, err
+}
+
+const getLatestYesQuote = `-- name: GetLatestYesQuote :one
+SELECT yes_bid, yes_ask, ts_received
+FROM polymarket_books
+WHERE market_id = $1 AND yes_bid IS NOT NULL
+ORDER BY ts_received DESC
+LIMIT 1
+`
+
+type GetLatestYesQuoteRow struct {
+	YesBid     decimal.NullDecimal `json:"yes_bid"`
+	YesAsk     decimal.NullDecimal `json:"yes_ask"`
+	TsReceived pgtype.Timestamptz  `json:"ts_received"`
+}
+
+func (q *Queries) GetLatestYesQuote(ctx context.Context, marketID string) (GetLatestYesQuoteRow, error) {
+	row := q.db.QueryRow(ctx, getLatestYesQuote, marketID)
+	var i GetLatestYesQuoteRow
+	err := row.Scan(&i.YesBid, &i.YesAsk, &i.TsReceived)
 	return i, err
 }
 

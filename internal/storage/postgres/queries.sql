@@ -28,3 +28,24 @@ RETURNING id;
 -- name: CountPolymarketBooksSince :one
 SELECT count(*) FROM polymarket_books
 WHERE market_id = $1 AND ts_received >= $2;
+
+-- name: GetLatestActiveMarket :one
+SELECT market_id, question, ts_received AS last_seen
+FROM polymarket_books
+WHERE ts_received >= $1
+ORDER BY ts_received DESC
+LIMIT 1;
+
+-- name: GetLatestYesQuote :one
+SELECT yes_bid, yes_ask, ts_received
+FROM polymarket_books
+WHERE market_id = $1 AND yes_bid IS NOT NULL
+ORDER BY ts_received DESC
+LIMIT 1;
+
+-- name: GetLatestNoQuote :one
+SELECT no_bid, no_ask, ts_received
+FROM polymarket_books
+WHERE market_id = $1 AND no_bid IS NOT NULL
+ORDER BY ts_received DESC
+LIMIT 1;

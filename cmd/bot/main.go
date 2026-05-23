@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/adonmuhammaddd/poly-don-bot/internal/api"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/config"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/binance"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/polymarket"
@@ -83,8 +84,10 @@ func run() error {
 		queries,
 	)
 
+	apiServer := api.NewServer(api.Config{Port: cfg.HTTP.Port}, queries, logger)
+
 	var wg sync.WaitGroup
-	errs := make(chan error, 3)
+	errs := make(chan error, 4)
 
 	wg.Add(1)
 	go func() {
@@ -108,6 +111,15 @@ func run() error {
 		defer wg.Done()
 		if err := polymarketClient.Run(ctx); err != nil {
 			errs <- fmt.Errorf("polymarket feed: %w", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("api server listening", slog.Int("port", cfg.HTTP.Port))
+		if err := apiServer.Run(ctx); err != nil {
+			errs <- fmt.Errorf("api server: %w", err)
 		}
 	}()
 
