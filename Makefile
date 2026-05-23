@@ -39,6 +39,19 @@ fmt: ## Format Go code
 build: ## Build bot binary into bin/bot
 	go build -o bin/bot ./cmd/bot
 
+.PHONY: backtest
+backtest: ## Replay historical ticks through detector: make backtest from=<RFC3339> to=<RFC3339> [THRESHOLD=0.001] [WINDOW=30s] [COOLDOWN=5s] [FORMAT=summary]
+	@if [ -z "$(from)" ] || [ -z "$(to)" ]; then \
+		echo "Usage: make backtest from=<RFC3339> to=<RFC3339> [THRESHOLD=0.001] [WINDOW=30s] [COOLDOWN=5s] [FORMAT=summary|csv|json]"; \
+		exit 1; \
+	fi
+	@go run ./cmd/backtest \
+		-from $(from) -to $(to) \
+		-threshold $(or $(THRESHOLD),0.001) \
+		-window $(or $(WINDOW),30s) \
+		-cooldown $(or $(COOLDOWN),5s) \
+		-format $(or $(FORMAT),summary)
+
 .PHONY: tidy
 tidy: ## Tidy go.mod
 	go mod tidy

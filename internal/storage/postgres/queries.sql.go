@@ -247,6 +247,52 @@ func (q *Queries) InsertSignal(ctx context.Context, arg InsertSignalParams) (int
 	return id, err
 }
 
+const listPriceTicksRange = `-- name: ListPriceTicksRange :many
+SELECT ts_exchange, price
+FROM price_ticks
+WHERE exchange = $1
+  AND symbol = $2
+  AND ts_exchange BETWEEN $3 AND $4
+ORDER BY ts_exchange ASC
+`
+
+type ListPriceTicksRangeParams struct {
+	Exchange string             `json:"exchange"`
+	Symbol   string             `json:"symbol"`
+	FromTs   pgtype.Timestamptz `json:"from_ts"`
+	ToTs     pgtype.Timestamptz `json:"to_ts"`
+}
+
+type ListPriceTicksRangeRow struct {
+	TsExchange pgtype.Timestamptz `json:"ts_exchange"`
+	Price      decimal.Decimal    `json:"price"`
+}
+
+func (q *Queries) ListPriceTicksRange(ctx context.Context, arg ListPriceTicksRangeParams) ([]ListPriceTicksRangeRow, error) {
+	rows, err := q.db.Query(ctx, listPriceTicksRange,
+		arg.Exchange,
+		arg.Symbol,
+		arg.FromTs,
+		arg.ToTs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPriceTicksRangeRow{}
+	for rows.Next() {
+		var i ListPriceTicksRangeRow
+		if err := rows.Scan(&i.TsExchange, &i.Price); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentSignals = `-- name: ListRecentSignals :many
 SELECT id, symbol, direction, magnitude, window_ms, confidence, detected_at, context, action_taken, action_reason
 FROM signals

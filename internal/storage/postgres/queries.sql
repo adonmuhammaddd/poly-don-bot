@@ -63,3 +63,11 @@ SELECT id, symbol, direction, magnitude, window_ms, confidence, detected_at, con
 FROM signals
 ORDER BY detected_at DESC
 LIMIT $1;
+
+-- name: ListPriceTicksRange :many
+SELECT ts_exchange, price
+FROM price_ticks
+WHERE exchange = sqlc.arg(exchange)
+  AND symbol = sqlc.arg(symbol)
+  AND ts_exchange BETWEEN sqlc.arg(from_ts) AND sqlc.arg(to_ts)
+ORDER BY ts_exchange ASC;
