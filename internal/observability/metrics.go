@@ -17,6 +17,12 @@ type Metrics struct {
 	BinanceReconnectSeconds prometheus.Histogram
 	BinanceMessageLatency   prometheus.Histogram
 
+	PolymarketBookUpdates      *prometheus.CounterVec
+	PolymarketDisconnects      *prometheus.CounterVec
+	PolymarketReconnectSeconds prometheus.Histogram
+	PolymarketActiveMarkets    prometheus.Gauge
+	PolymarketRESTErrors       *prometheus.CounterVec
+
 	registry *prometheus.Registry
 }
 
@@ -51,6 +57,40 @@ func NewMetrics() *Metrics {
 				Buckets: prometheus.ExponentialBuckets(0.001, 2, 12),
 			},
 		),
+		PolymarketBookUpdates: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "polymarket_book_updates_total",
+				Help: "Number of book/price_change updates received from Polymarket, by side and source.",
+			},
+			[]string{"side", "source"},
+		),
+		PolymarketDisconnects: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "polymarket_disconnects_total",
+				Help: "Number of WebSocket disconnects from Polymarket, by reason.",
+			},
+			[]string{"reason"},
+		),
+		PolymarketReconnectSeconds: prometheus.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "polymarket_reconnect_duration_seconds",
+				Help:    "Time to re-establish a Polymarket WebSocket connection after disconnect.",
+				Buckets: prometheus.ExponentialBuckets(0.5, 2, 8),
+			},
+		),
+		PolymarketActiveMarkets: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "polymarket_active_markets",
+				Help: "1 when a matching BTC Up/Down market is currently being tracked, 0 otherwise.",
+			},
+		),
+		PolymarketRESTErrors: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "polymarket_rest_errors_total",
+				Help: "Number of REST API errors from Polymarket gamma-api, by reason.",
+			},
+			[]string{"reason"},
+		),
 		registry: reg,
 	}
 	reg.MustRegister(
@@ -58,6 +98,11 @@ func NewMetrics() *Metrics {
 		m.BinanceDisconnects,
 		m.BinanceReconnectSeconds,
 		m.BinanceMessageLatency,
+		m.PolymarketBookUpdates,
+		m.PolymarketDisconnects,
+		m.PolymarketReconnectSeconds,
+		m.PolymarketActiveMarkets,
+		m.PolymarketRESTErrors,
 	)
 	return m
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/adonmuhammaddd/poly-don-bot/internal/config"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/binance"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/polymarket"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/observability"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
@@ -66,8 +67,24 @@ func run() error {
 		queries,
 	)
 
+	polymarketClient := polymarket.NewClient(
+		polymarket.Config{
+			WSURL:             cfg.Polymarket.WSURL,
+			RESTBaseURL:       cfg.Polymarket.RESTBaseURL,
+			SlugPrefix:        cfg.Polymarket.SlugPrefix,
+			RequestsPerMinute: cfg.Polymarket.RequestsPerMinute,
+			InitialBackoff:    cfg.Polymarket.InitialBackoff,
+			MaxBackoff:        cfg.Polymarket.MaxBackoff,
+			PingInterval:      cfg.Polymarket.PingInterval,
+			ReadTimeout:       cfg.Polymarket.ReadTimeout,
+		},
+		logger,
+		metrics,
+		queries,
+	)
+
 	var wg sync.WaitGroup
-	errs := make(chan error, 2)
+	errs := make(chan error, 3)
 
 	wg.Add(1)
 	go func() {
@@ -83,6 +100,14 @@ func run() error {
 		defer wg.Done()
 		if err := binanceClient.Run(ctx); err != nil {
 			errs <- fmt.Errorf("binance feed: %w", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := polymarketClient.Run(ctx); err != nil {
+			errs <- fmt.Errorf("polymarket feed: %w", err)
 		}
 	}()
 

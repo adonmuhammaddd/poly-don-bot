@@ -16,3 +16,15 @@ LIMIT 1;
 -- name: CountPriceTicksSince :one
 SELECT count(*) FROM price_ticks
 WHERE exchange = $1 AND ts_received >= $2;
+
+-- name: InsertPolymarketBook :one
+INSERT INTO polymarket_books (
+  market_id, question, yes_bid, yes_ask, no_bid, no_ask, raw_payload
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING id;
+
+-- name: CountPolymarketBooksSince :one
+SELECT count(*) FROM polymarket_books
+WHERE market_id = $1 AND ts_received >= $2;

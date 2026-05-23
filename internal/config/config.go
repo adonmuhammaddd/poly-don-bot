@@ -10,12 +10,13 @@ import (
 )
 
 type Config struct {
-	Env      string
-	LogLevel string
-	HTTP     HTTPConfig
-	Postgres PostgresConfig
-	Redis    RedisConfig
-	Binance  BinanceConfig
+	Env        string
+	LogLevel   string
+	HTTP       HTTPConfig
+	Postgres   PostgresConfig
+	Redis      RedisConfig
+	Binance    BinanceConfig
+	Polymarket PolymarketConfig
 }
 
 type HTTPConfig struct {
@@ -39,6 +40,18 @@ type BinanceConfig struct {
 	MaxBackoff        time.Duration
 	HeartbeatInterval time.Duration
 	HeartbeatTimeout  time.Duration
+}
+
+type PolymarketConfig struct {
+	WSURL             string
+	RESTBaseURL       string
+	SlugPrefix        string
+	RequestsPerMinute int
+	RefreshInterval   time.Duration
+	InitialBackoff    time.Duration
+	MaxBackoff        time.Duration
+	PingInterval      time.Duration
+	ReadTimeout       time.Duration
 }
 
 func Load() (Config, error) {
@@ -78,9 +91,28 @@ func Load() (Config, error) {
 			HeartbeatInterval: 30 * time.Second,
 			HeartbeatTimeout:  10 * time.Second,
 		},
+		Polymarket: PolymarketConfig{
+			WSURL:             envStr("POLYMARKET_WS_URL", "wss://ws-subscriptions-clob.polymarket.com/ws/market"),
+			RESTBaseURL:       envStr("POLYMARKET_REST_URL", "https://gamma-api.polymarket.com"),
+			SlugPrefix:        envStr("POLYMARKET_SLUG_PREFIX", "btc-updown-5m-"),
+			RequestsPerMinute: envIntOrDefault("POLYMARKET_REQS_PER_MIN", 80),
+			RefreshInterval:   30 * time.Second,
+			InitialBackoff:    time.Second,
+			MaxBackoff:        30 * time.Second,
+			PingInterval:      10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+		},
 	}
 
 	return c, errors.Join(errs...)
+}
+
+func envIntOrDefault(key string, def int) int {
+	n, err := envInt(key, def)
+	if err != nil {
+		return def
+	}
+	return n
 }
 
 func envStr(key, def string) string {

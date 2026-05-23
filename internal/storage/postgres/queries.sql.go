@@ -12,6 +12,23 @@ import (
 	decimal "github.com/shopspring/decimal"
 )
 
+const countPolymarketBooksSince = `-- name: CountPolymarketBooksSince :one
+SELECT count(*) FROM polymarket_books
+WHERE market_id = $1 AND ts_received >= $2
+`
+
+type CountPolymarketBooksSinceParams struct {
+	MarketID   string             `json:"market_id"`
+	TsReceived pgtype.Timestamptz `json:"ts_received"`
+}
+
+func (q *Queries) CountPolymarketBooksSince(ctx context.Context, arg CountPolymarketBooksSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPolymarketBooksSince, arg.MarketID, arg.TsReceived)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPriceTicksSince = `-- name: CountPriceTicksSince :one
 SELECT count(*) FROM price_ticks
 WHERE exchange = $1 AND ts_received >= $2
@@ -63,6 +80,40 @@ func (q *Queries) GetLatestPriceTick(ctx context.Context, arg GetLatestPriceTick
 		&i.TsReceived,
 	)
 	return i, err
+}
+
+const insertPolymarketBook = `-- name: InsertPolymarketBook :one
+INSERT INTO polymarket_books (
+  market_id, question, yes_bid, yes_ask, no_bid, no_ask, raw_payload
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
+)
+RETURNING id
+`
+
+type InsertPolymarketBookParams struct {
+	MarketID   string              `json:"market_id"`
+	Question   string              `json:"question"`
+	YesBid     decimal.NullDecimal `json:"yes_bid"`
+	YesAsk     decimal.NullDecimal `json:"yes_ask"`
+	NoBid      decimal.NullDecimal `json:"no_bid"`
+	NoAsk      decimal.NullDecimal `json:"no_ask"`
+	RawPayload []byte              `json:"raw_payload"`
+}
+
+func (q *Queries) InsertPolymarketBook(ctx context.Context, arg InsertPolymarketBookParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertPolymarketBook,
+		arg.MarketID,
+		arg.Question,
+		arg.YesBid,
+		arg.YesAsk,
+		arg.NoBid,
+		arg.NoAsk,
+		arg.RawPayload,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertPriceTick = `-- name: InsertPriceTick :one
