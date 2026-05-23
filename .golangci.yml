@@ -2,6 +2,7 @@ version: "2"
 
 run:
   timeout: 5m
+  go: '1.25'
 
 linters:
   default: none
@@ -13,24 +14,23 @@ linters:
     - unused
     - misspell
     - unconvert
-    - revive
     - bodyclose
     - gosec
   settings:
     govet:
       enable:
         - shadow
-    revive:
-      rules:
-        - name: exported
-          severity: warning
+    staticcheck:
+      checks:
+        - all
+        - -QF1006
+        - -ST1000
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - gosec
           - errcheck
-          - revive
 
 formatters:
   enable:

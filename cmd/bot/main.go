@@ -3,57 +3,112 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
+
+	"github.com/adonmuhammaddd/poly-don-bot/internal/config"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/binance"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/observability"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
 
 func main() {
-	logger := newLogger(os.Getenv("BOT_ENV"), os.Getenv("BOT_LOG_LEVEL"))
-	slog.SetDefault(logger)
+	if err := run(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
+}
 
-	logger.Info("starting poly-don-bot")
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	logger := observability.NewLogger(cfg.Env, cfg.LogLevel)
+	slog.SetDefault(logger)
+	logger.Info("starting poly-don-bot",
+		slog.String("env", cfg.Env),
+		slog.String("log_level", cfg.LogLevel),
+	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, logger); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("bot exited with error", slog.Any("error", err))
-		os.Exit(1)
+	pool, err := postgres.NewPool(ctx, cfg.Postgres.URL)
+	if err != nil {
+		return fmt.Errorf("connect postgres: %w", err)
 	}
+	defer pool.Close()
+	logger.Info("postgres connected")
 
-	logger.Info("bot shutdown complete")
-}
+	metrics := observability.NewMetrics()
+	metricsServer := observability.NewMetricsServer(cfg.HTTP.MetricsPort, metrics)
 
-func run(ctx context.Context, logger *slog.Logger) error {
-	logger.Info("bot running")
+	queries := postgres.New(pool)
+	binanceClient := binance.NewClient(
+		binance.Config{
+			WSURL:             cfg.Binance.WSURL,
+			Symbols:           cfg.Binance.Symbols,
+			Streams:           cfg.Binance.Streams,
+			InitialBackoff:    cfg.Binance.InitialBackoff,
+			MaxBackoff:        cfg.Binance.MaxBackoff,
+			HeartbeatInterval: cfg.Binance.HeartbeatInterval,
+			HeartbeatTimeout:  cfg.Binance.HeartbeatTimeout,
+		},
+		logger,
+		metrics,
+		queries,
+	)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("metrics server listening", slog.Int("port", cfg.HTTP.MetricsPort))
+		if err := metricsServer.Run(ctx); err != nil {
+			errs <- fmt.Errorf("metrics server: %w", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := binanceClient.Run(ctx); err != nil {
+			errs <- fmt.Errorf("binance feed: %w", err)
+		}
+	}()
+
 	<-ctx.Done()
-	logger.Info("shutdown signal received")
-	return ctx.Err()
-}
+	logger.Info("shutdown signal received, draining...")
 
-func newLogger(env, level string) *slog.Logger {
-	var lvl slog.Level
-	switch level {
-	case "debug":
-		lvl = slog.LevelDebug
-	case "warn":
-		lvl = slog.LevelWarn
-	case "error":
-		lvl = slog.LevelError
-	default:
-		lvl = slog.LevelInfo
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		logger.Info("drained cleanly")
+	case <-time.After(30 * time.Second):
+		logger.Warn("drain timeout exceeded, forcing exit")
 	}
 
-	opts := &slog.HandlerOptions{Level: lvl}
-
-	var handler slog.Handler
-	if env == "prod" {
-		handler = slog.NewJSONHandler(os.Stderr, opts)
-	} else {
-		handler = slog.NewTextHandler(os.Stderr, opts)
+	close(errs)
+	var firstErr error
+	for e := range errs {
+		if firstErr == nil && !errors.Is(e, context.Canceled) {
+			firstErr = e
+		}
 	}
-
-	return slog.New(handler)
+	logger.Info("bot shutdown complete")
+	return firstErr
 }

@@ -1,0 +1,80 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "internal/storage/postgres/queries.sql"
+    schema: "migrations"
+    gen:
+      go:
+        package: "postgres"
+        out: "internal/storage/postgres"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_empty_slices: true
+        overrides:
+          - column: "price_ticks.price"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "Decimal"
+          - column: "polymarket_books.yes_bid"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
+          - column: "polymarket_books.yes_ask"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
+          - column: "polymarket_books.no_bid"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
+          - column: "polymarket_books.no_ask"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
+          - column: "signals.magnitude"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "Decimal"
+          - column: "signals.confidence"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "Decimal"
+          - column: "trades.entry_price"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "Decimal"
+          - column: "trades.size_usd"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "Decimal"
+          - column: "trades.exit_price"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
+          - column: "trades.pnl_usd"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
+          - column: "trades.fees_usd"
+            nullable: true
+            go_type:
+              import: "github.com/shopspring/decimal"
+              package: "decimal"
+              type: "NullDecimal"
