@@ -1,6 +1,10 @@
 package api
 
-import "time"
+import (
+	"time"
+
+	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
+)
 
 type HealthResponse struct {
 	Status string `json:"status"`
@@ -29,4 +33,15 @@ type LatestBookResponse struct {
 	YesUpdated time.Time `json:"yesUpdated"`
 	NoUpdated  time.Time `json:"noUpdated"`
 	Mid        *string   `json:"mid,omitempty"`
+}
+
+type LatencyResponse struct {
+	Stats   latency.Stats        `json:"stats"`
+	Samples []LatencyMeasurement `json:"samples"`
+}
+
+type LatencyMeasurement struct {
+	BinanceMoveAt     time.Time `json:"binanceMoveAt"`
+	PolymarketReprice time.Time `json:"polymarketReprice"`
+	DeltaMs           int64     `json:"deltaMs"`
 }

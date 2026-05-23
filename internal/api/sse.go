@@ -85,6 +85,41 @@ func (s *Server) handleStreamPrices(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleStreamLatency(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	setupSSEHeaders(w)
+
+	ticker := time.NewTicker(s.streamInterval)
+	defer ticker.Stop()
+	keepalive := time.NewTicker(30 * time.Second)
+	defer keepalive.Stop()
+
+	push := func() {
+		resp := s.buildLatencyResponse(60)
+		data, err := json.Marshal(resp)
+		if err != nil {
+			return
+		}
+		_ = writeSSE(w, flusher, data)
+	}
+
+	push()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			push()
+		case <-keepalive.C:
+			_ = writeSSEKeepalive(w, flusher)
+		}
+	}
+}
+
 func (s *Server) handleStreamBook(w http.ResponseWriter, r *http.Request) {
 	marketID := r.URL.Query().Get("marketId")
 	if marketID == "" {

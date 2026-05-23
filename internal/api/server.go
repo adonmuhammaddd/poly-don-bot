@@ -12,8 +12,15 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
+
+// LatencyView exposes the read surface the API needs from the tracker.
+type LatencyView interface {
+	Stats() latency.Stats
+	Recent(n int) []latency.Measurement
+}
 
 type Repository interface {
 	GetLatestPriceTick(ctx context.Context, arg postgres.GetLatestPriceTickParams) (postgres.GetLatestPriceTickRow, error)
@@ -30,13 +37,14 @@ type Config struct {
 
 type Server struct {
 	repo           Repository
+	latency        LatencyView
 	logger         *slog.Logger
 	srv            *http.Server
 	streamInterval time.Duration
 	router         http.Handler
 }
 
-func NewServer(cfg Config, repo Repository, logger *slog.Logger) *Server {
+func NewServer(cfg Config, repo Repository, lat LatencyView, logger *slog.Logger) *Server {
 	if cfg.StreamInterval == 0 {
 		cfg.StreamInterval = 250 * time.Millisecond
 	}
@@ -46,6 +54,7 @@ func NewServer(cfg Config, repo Repository, logger *slog.Logger) *Server {
 
 	s := &Server{
 		repo:           repo,
+		latency:        lat,
 		logger:         logger.With(slog.String("component", "api")),
 		streamInterval: cfg.StreamInterval,
 	}
@@ -60,8 +69,10 @@ func NewServer(cfg Config, repo Repository, logger *slog.Logger) *Server {
 	r.Get("/api/prices/latest", s.handleLatestPrice)
 	r.Get("/api/polymarket/current", s.handleCurrentMarket)
 	r.Get("/api/polymarket/book/{marketId}", s.handleLatestBook)
+	r.Get("/api/latency/recent", s.handleLatencyRecent)
 	r.Get("/api/stream/prices", s.handleStreamPrices)
 	r.Get("/api/stream/book", s.handleStreamBook)
+	r.Get("/api/stream/latency", s.handleStreamLatency)
 
 	s.router = r
 	s.srv = &http.Server{

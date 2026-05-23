@@ -125,6 +125,24 @@ func (s *Server) latestBook(r *http.Request, marketID string) (LatestBookRespons
 	return resp, true
 }
 
+func (s *Server) handleLatencyRecent(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.buildLatencyResponse(60))
+}
+
+func (s *Server) buildLatencyResponse(maxSamples int) LatencyResponse {
+	stats := s.latency.Stats()
+	recent := s.latency.Recent(maxSamples)
+	samples := make([]LatencyMeasurement, len(recent))
+	for i, m := range recent {
+		samples[i] = LatencyMeasurement{
+			BinanceMoveAt:     m.BinanceMoveAt.UTC(),
+			PolymarketReprice: m.PolymarketReprice.UTC(),
+			DeltaMs:           m.DeltaMs,
+		}
+	}
+	return LatencyResponse{Stats: stats, Samples: samples}
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

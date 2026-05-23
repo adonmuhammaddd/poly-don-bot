@@ -15,6 +15,7 @@ import (
 	"github.com/adonmuhammaddd/poly-don-bot/internal/config"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/binance"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/feeds/polymarket"
+	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/observability"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
@@ -53,6 +54,9 @@ func run() error {
 	metricsServer := observability.NewMetricsServer(cfg.HTTP.MetricsPort, metrics)
 
 	queries := postgres.New(pool)
+
+	tracker := latency.NewTracker(latency.Config{})
+
 	binanceClient := binance.NewClient(
 		binance.Config{
 			WSURL:             cfg.Binance.WSURL,
@@ -67,6 +71,7 @@ func run() error {
 		metrics,
 		queries,
 	)
+	binanceClient.WithListener(tracker)
 
 	polymarketClient := polymarket.NewClient(
 		polymarket.Config{
@@ -83,8 +88,9 @@ func run() error {
 		metrics,
 		queries,
 	)
+	polymarketClient.WithListener(tracker)
 
-	apiServer := api.NewServer(api.Config{Port: cfg.HTTP.Port}, queries, logger)
+	apiServer := api.NewServer(api.Config{Port: cfg.HTTP.Port}, queries, tracker, logger)
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 4)

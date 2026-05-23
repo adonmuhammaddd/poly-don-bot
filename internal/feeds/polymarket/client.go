@@ -17,6 +17,11 @@ import (
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
 
+// BookListener receives each book/price_change update after it is persisted.
+type BookListener interface {
+	OnBookUpdate(ts time.Time)
+}
+
 type Config struct {
 	WSURL             string
 	RESTBaseURL       string
@@ -41,12 +46,13 @@ type Dialer interface {
 }
 
 type Client struct {
-	cfg     Config
-	rest    MarketFinder
-	logger  *slog.Logger
-	metrics *observability.Metrics
-	storage Storage
-	dialer  Dialer
+	cfg      Config
+	rest     MarketFinder
+	logger   *slog.Logger
+	metrics  *observability.Metrics
+	storage  Storage
+	dialer   Dialer
+	listener BookListener
 }
 
 func NewClient(cfg Config, logger *slog.Logger, metrics *observability.Metrics, storage Storage) *Client {
@@ -67,6 +73,12 @@ func (c *Client) WithDialer(d Dialer) *Client {
 
 func (c *Client) WithMarketFinder(m MarketFinder) *Client {
 	c.rest = m
+	return c
+}
+
+// WithListener registers a listener that receives each persisted book update.
+func (c *Client) WithListener(l BookListener) *Client {
+	c.listener = l
 	return c
 }
 
@@ -240,6 +252,9 @@ func (c *Client) handleBookEvent(ctx context.Context, market *Market, raw []byte
 		return fmt.Errorf("insert book: %w", err)
 	}
 	c.metrics.PolymarketBookUpdates.WithLabelValues(side, "book").Inc()
+	if c.listener != nil {
+		c.listener.OnBookUpdate(time.Now().UTC())
+	}
 	return nil
 }
 
@@ -276,6 +291,9 @@ func (c *Client) handlePriceChangeEvent(ctx context.Context, market *Market, raw
 			return fmt.Errorf("insert price_change: %w", err)
 		}
 		c.metrics.PolymarketBookUpdates.WithLabelValues(side, "price_change").Inc()
+		if c.listener != nil {
+			c.listener.OnBookUpdate(time.Now().UTC())
+		}
 	}
 	return nil
 }

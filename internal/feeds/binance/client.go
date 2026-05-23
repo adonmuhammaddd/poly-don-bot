@@ -13,10 +13,16 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 
 	"github.com/adonmuhammaddd/poly-don-bot/internal/observability"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
+
+// TickListener receives each tick after it is successfully persisted.
+type TickListener interface {
+	OnTick(price decimal.Decimal, ts time.Time)
+}
 
 const exchangeName = "binance"
 
@@ -42,11 +48,12 @@ type Dialer interface {
 }
 
 type Client struct {
-	cfg     Config
-	logger  *slog.Logger
-	metrics *observability.Metrics
-	storage Storage
-	dialer  Dialer
+	cfg      Config
+	logger   *slog.Logger
+	metrics  *observability.Metrics
+	storage  Storage
+	dialer   Dialer
+	listener TickListener
 }
 
 func NewClient(cfg Config, logger *slog.Logger, metrics *observability.Metrics, storage Storage) *Client {
@@ -62,6 +69,12 @@ func NewClient(cfg Config, logger *slog.Logger, metrics *observability.Metrics, 
 // WithDialer overrides the WebSocket dialer (used in tests).
 func (c *Client) WithDialer(d Dialer) *Client {
 	c.dialer = d
+	return c
+}
+
+// WithListener registers a listener that receives each persisted tick.
+func (c *Client) WithListener(l TickListener) *Client {
+	c.listener = l
 	return c
 }
 
@@ -206,6 +219,9 @@ func (c *Client) handleMessage(ctx context.Context, raw []byte) error {
 		return fmt.Errorf("insert: %w", err)
 	}
 	c.metrics.BinanceTicks.WithLabelValues(symbol, "aggTrade").Inc()
+	if c.listener != nil {
+		c.listener.OnTick(price, tradeTime)
+	}
 	return nil
 }
 

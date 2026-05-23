@@ -110,6 +110,48 @@ Make sure pnpm 10+ is active: `corepack enable && corepack prepare pnpm@latest -
 
 ---
 
+## Phase 1 acceptance
+
+Per `HANDOFF.md` Section 10, Phase 1 is done when:
+
+```bash
+# Terminal 1: infra + bot
+make setup              # if first time; otherwise: make up
+make dev
+
+# Terminal 2: dashboard
+make dashboard-dev
+
+# Terminal 3: verify endpoints
+curl -s localhost:8080/api/health
+curl -s localhost:8080/api/prices/latest?exchange=binance\&symbol=btcusdt
+curl -s localhost:8080/api/polymarket/current
+curl -s localhost:8080/api/latency/recent
+```
+
+Open:
+- Dashboard → http://localhost:3000 (Binance + Polymarket cards + Latency widget)
+- Grafana → http://localhost:3001 (admin/admin), navigate to "Poly Don Bot" dashboard
+- Prometheus → http://localhost:9090
+
+Watch the dashboard for ~1 hour. Acceptance items:
+
+- [x] `docker compose up` brings up postgres, redis, prometheus, grafana
+- [x] `.env.example` documents required env vars
+- [x] README covers setup, dev workflow, troubleshooting
+- [x] `make test` green
+- [x] `make lint` zero warnings
+- [x] Binance WS streams ticks into `price_ticks` table
+- [x] Polymarket WS streams book updates into `polymarket_books` table
+- [x] Dashboard shows live BTC price + Polymarket implied probability side-by-side
+- [x] Dashboard shows latency widget (last delta, p50, p95, bar chart of recent pairs)
+- [x] Grafana dashboard shows feed uptime, tick rate, disconnect rate
+- [ ] **Operator confirms lag visible during a BTC move** ← manual sign-off
+
+When BTC moves >0.05%, the Binance card jumps; the latency widget shows the ms it takes Polymarket to reprice. Bars are green &lt;1s, amber &lt;5s, red beyond.
+
+---
+
 ## Contributing
 
 - Conventional commit messages, scoped per package: `feat(feeds/binance): ...`

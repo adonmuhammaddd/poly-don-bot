@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 
+	"github.com/adonmuhammaddd/poly-don-bot/internal/latency"
 	"github.com/adonmuhammaddd/poly-don-bot/internal/storage/postgres"
 )
 
@@ -192,7 +193,7 @@ func TestStreamBook_HeadersAndInitialPush(t *testing.T) {
 		},
 		latestNoErr: pgx.ErrNoRows,
 	}
-	s := NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, testLogger())
+	s := NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, &fakeLatency{}, testLogger())
 
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
@@ -233,6 +234,35 @@ func TestStreamBook_MissingParams(t *testing.T) {
 	}
 }
 
+func TestHandleLatencyRecent(t *testing.T) {
+	now := time.Now().UTC()
+	repo := &fakeRepo{}
+	fl := &fakeLatency{
+		stats: latency.Stats{
+			Count: 3, AvgMs: 700, P50Ms: 650, P95Ms: 1200, LastDeltaMs: 800, WindowSecs: 60,
+		},
+		samples: []latency.Measurement{
+			{BinanceMoveAt: now.Add(-3 * time.Second), PolymarketReprice: now.Add(-2 * time.Second), DeltaMs: 1000},
+			{BinanceMoveAt: now.Add(-2 * time.Second), PolymarketReprice: now.Add(-1500 * time.Millisecond), DeltaMs: 500},
+		},
+	}
+	s := NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, fl, testLogger())
+	rec := doRequest(t, s, http.MethodGet, "/api/latency/recent")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d", rec.Code)
+	}
+	var got LatencyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if got.Stats.Count != 3 || got.Stats.P95Ms != 1200 {
+		t.Errorf("stats=%+v", got.Stats)
+	}
+	if len(got.Samples) != 2 {
+		t.Errorf("samples len=%d want 2", len(got.Samples))
+	}
+}
+
 func TestHandleLatestBook_NoData(t *testing.T) {
 	s := newTestServer(&fakeRepo{
 		latestYesErr: pgx.ErrNoRows,
@@ -267,7 +297,7 @@ func TestStreamPrices_HeadersAndInitialPush(t *testing.T) {
 			TsReceived: pgtype.Timestamptz{Time: now, Valid: true},
 		},
 	}
-	s := NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, testLogger())
+	s := NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, &fakeLatency{}, testLogger())
 
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
@@ -336,8 +366,16 @@ func (f *fakeRepo) GetLatestNoQuote(_ context.Context, _ string) (postgres.GetLa
 }
 
 func newTestServer(repo Repository) *Server {
-	return NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, testLogger())
+	return NewServer(Config{Port: 0, StreamInterval: 10 * time.Millisecond}, repo, &fakeLatency{}, testLogger())
 }
+
+type fakeLatency struct {
+	stats   latency.Stats
+	samples []latency.Measurement
+}
+
+func (f *fakeLatency) Stats() latency.Stats               { return f.stats }
+func (f *fakeLatency) Recent(_ int) []latency.Measurement { return f.samples }
 
 func doRequest(t *testing.T, s *Server, method, path string) *httptest.ResponseRecorder {
 	t.Helper()

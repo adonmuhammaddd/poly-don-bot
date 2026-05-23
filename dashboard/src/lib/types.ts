@@ -24,3 +24,24 @@ export interface LatestBook {
   noUpdated: string;
   mid?: string;
 }
+
+export interface LatencyStats {
+  count: number;
+  avgMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  lastDeltaMs: number;
+  windowSecs: number;
+  pendingMoves: number;
+}
+
+export interface LatencyMeasurement {
+  binanceMoveAt: string;
+  polymarketReprice: string;
+  deltaMs: number;
+}
+
+export interface LatencyResponse {
+  stats: LatencyStats;
+  samples: LatencyMeasurement[];
+}

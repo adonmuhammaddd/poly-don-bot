@@ -1,0 +1,112 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "uid": "poly-don-bot",
+  "title": "Poly Don Bot",
+  "tags": ["polymarket", "binance", "trading"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Polymarket Market",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"expr": "polymarket_active_markets", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"options": {"0": {"text": "no market"}}, "type": "value"},
+            {"options": {"1": {"text": "tracking"}}, "type": "value"}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Binance Tick Rate (per sec)",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"expr": "sum(rate(binance_ticks_total[1m]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 1}}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Polymarket Update Rate (per sec)",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"expr": "sum(rate(polymarket_book_updates_total[1m]))", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 1}}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Disconnects (5m)",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [{"expr": "sum(increase(binance_disconnects_total[5m])) + sum(increase(polymarket_disconnects_total[5m]))", "refId": "A"}],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Tick / Update Rates",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum(rate(binance_ticks_total[30s]))", "refId": "A", "legendFormat": "binance ticks/s"},
+        {"expr": "sum(rate(polymarket_book_updates_total[30s]))", "refId": "B", "legendFormat": "polymarket updates/s"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Binance Exchange→Received Latency",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "histogram_quantile(0.5, sum(rate(binance_message_latency_seconds_bucket[1m])) by (le))", "refId": "A", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum(rate(binance_message_latency_seconds_bucket[1m])) by (le))", "refId": "B", "legendFormat": "p95"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Disconnects Cumulative",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum by (reason) (binance_disconnects_total)", "refId": "A", "legendFormat": "binance {{reason}}"},
+        {"expr": "sum by (reason) (polymarket_disconnects_total)", "refId": "B", "legendFormat": "polymarket {{reason}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Polymarket Updates by Side",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "targets": [
+        {"expr": "sum by (side) (rate(polymarket_book_updates_total[30s]))", "refId": "A", "legendFormat": "{{side}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    }
+  ]
+}
